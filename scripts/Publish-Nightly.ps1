@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 function Invoke-GitHub([string[]]$Arguments) {
+    if ($Arguments[0] -eq 'api') { $Arguments += @('-H', 'Cache-Control: no-cache') }
     $output = & gh @Arguments
     if ($LASTEXITCODE -ne 0) { throw "GitHub CLI failed: gh $($Arguments[0]) $($Arguments[1])" }
     return $output
@@ -74,9 +75,11 @@ else {
     $null = Invoke-GitHub @('api', '--method', 'POST', "repos/$Repository/git/refs", '-f', 'ref=refs/tags/nightly', '-f', "sha=$Commit", '--silent')
 }
 if (!$release) {
-    $null = Invoke-GitHub @('release', 'create', 'nightly', '--repo', $Repository, '--draft', '--prerelease', '--latest=false', '--verify-tag', '--target', $Commit, '--title', 'Nightly build', '--notes-file', $notesPath)
-    $release = Get-NightlyRelease
-    if (!$release) { throw 'The nightly draft was not created.' }
+    $createPath = Join-Path $staging 'release.json'
+    @{ tag_name = 'nightly'; target_commitish = $Commit; name = 'Nightly build'; draft = $true; prerelease = $true; make_latest = 'false'; body = Get-Content -LiteralPath $notesPath -Raw } |
+        ConvertTo-Json | Set-Content -LiteralPath $createPath -Encoding utf8NoBOM
+    $release = ((Invoke-GitHub @('api', '--method', 'POST', "repos/$Repository/releases", '--input', $createPath)) -join "`n") | ConvertFrom-Json
+    if (!$release.id) { throw 'The nightly draft was not created.' }
 }
 
 # Delete every previous asset, including older versioned filenames and checksum files.

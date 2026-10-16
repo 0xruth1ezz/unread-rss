@@ -21,6 +21,7 @@ function Reset-State([bool]$Existing = $false) {
         Deleted = [System.Collections.Generic.List[string]]::new()
         Publications = [System.Collections.Generic.List[object]]::new()
         AdvanceDuringUpload = $false; CorruptDigest = $false; FailUpload = $false
+        ReleaseLookups = 0
     }
     if ($Existing) {
         $global:nightlyReleaseTestState.Tag = 'b' * 40
@@ -41,8 +42,17 @@ function gh {
         $method = if ($methodIndex -ge 0) { $arguments[$methodIndex + 1] } else { 'GET' }
         if ($endpoint -eq 'repos/owner/repo/git/ref/heads/master') { return $state.Head }
         if ($endpoint -eq 'repos/owner/repo/releases?per_page=100') {
+            $state.ReleaseLookups++
             if ($state.Release) { return ConvertTo-Json -InputObject $state.Release -Compress }
             return
+        }
+        if ($endpoint -eq 'repos/owner/repo/releases' -and $method -eq 'POST') {
+            $inputIndex = [array]::IndexOf($arguments, '--input')
+            $payload = Get-Content -LiteralPath $arguments[$inputIndex + 1] -Raw | ConvertFrom-Json
+            Assert ($state.Tag -eq $commit -and $payload.target_commitish -eq $commit) 'A new draft uses the exact built commit.'
+            Assert ($payload.draft -and $payload.prerelease) 'A new nightly starts as a prerelease draft.'
+            $state.Release = @{ id = 27; tag_name = 'nightly'; draft = $true; immutable = $false }
+            return ConvertTo-Json -InputObject $state.Release -Compress
         }
         if ($endpoint -eq 'repos/owner/repo/git/matching-refs/tags/nightly') { return $state.Tag }
         if ($endpoint -in @('repos/owner/repo/git/refs', 'repos/owner/repo/git/refs/tags/nightly')) {
@@ -65,12 +75,6 @@ function gh {
     }
     if ($arguments[0] -eq 'release') {
         switch ($arguments[1]) {
-            'create' {
-                Assert ($state.Tag -eq $commit) 'The nightly tag exists at the exact source commit before creation.'
-                Assert ($arguments -contains '--draft') 'A new release starts as a draft.'
-                $state.Release = @{ id = 27; tag_name = 'nightly'; draft = $true; immutable = $false }
-                return
-            }
             'edit' {
                 if ($arguments -contains '--draft=true') { $state.Release.draft = $true }
                 if ($arguments -contains '--draft=false') {
@@ -113,6 +117,7 @@ try {
     Publish-Fixture
     Assert ($global:nightlyReleaseTestState.Publications.Count -eq 1) 'The first nightly is published.'
     Assert ($global:nightlyReleaseTestState.Tag -eq $commit) 'The tag targets the built commit.'
+    Assert ($global:nightlyReleaseTestState.ReleaseLookups -eq 1) 'Creation uses its API response, without a potentially stale draft lookup.'
     Assert (($global:nightlyReleaseTestState.Assets.name | Sort-Object) -join ',' -eq 'Unread-win-x64-setup.exe,Unread-win-x64.zip') 'Exactly the ZIP and installer are attached separately.'
     Assert ((Get-Content -LiteralPath (Join-Path $fixture 'nightly/notes.md') -Raw) -match $commit) 'Release notes identify the exact commit.'
 
