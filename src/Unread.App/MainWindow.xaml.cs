@@ -3,6 +3,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System.Collections.ObjectModel;
@@ -298,7 +299,21 @@ public sealed partial class MainWindow : Window
         PreviousButton.IsEnabled = hasArticle && ArticleList.SelectedIndex > 0;
         NextButton.IsEnabled = _rows.Count > 0 && ArticleList.SelectedIndex < _rows.Count - 1;
         if (_selected is not { } article) { ReadingStatus.Text = ""; return; }
-        ArticleTitle.Text = article.Title;
+        ArticleTitle.Inlines.Clear();
+        var title = new Run { Text = article.Title };
+        if (ArticleText.TryWebUri(article.Url, out var sourceUri))
+        {
+            var link = new Hyperlink { NavigateUri = sourceUri, UnderlineStyle = UnderlineStyle.None, Foreground = Palette.Brush("ReaderForeground") };
+            link.Inlines.Add(title);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(link, "Open original article: " + article.Title);
+            ArticleTitle.Inlines.Add(link);
+            ToolTipService.SetToolTip(ArticleTitle, sourceUri.AbsoluteUri);
+        }
+        else
+        {
+            ArticleTitle.Inlines.Add(title);
+            ToolTipService.SetToolTip(ArticleTitle, null);
+        }
         ArticleSource.Text = article.SourceLabel;
         var date = article.Published.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt");
         ArticleByline.Text = string.IsNullOrWhiteSpace(article.Author) ? date : article.Author + "\n" + date;

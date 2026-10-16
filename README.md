@@ -63,7 +63,7 @@ Read/save changes are persisted before transmission and queued when offline. Syn
 - Native selectable article text, headings, images, emphasis, quotations and web links. Article content never executes scripts.
 - Paper, Dusk and Campfire themes; adjustable text size and optional mark-as-read on open.
 - Compact windows show the feed and article lists, then open the reader with a Back button.
-- Open the original website or copy its link.
+- Click an article's title to open its original source in your default browser, or copy its link from the toolbar.
 
 | Key | Action |
 | --- | --- |
