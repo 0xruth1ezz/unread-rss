@@ -1,0 +1,35 @@
+<Application x:Class="Unread.App.App"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries><XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" /></ResourceDictionary.MergedDictionaries>
+      <SolidColorBrush x:Key="ReaderBackground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ReaderSidebar" Color="#F1F1EF" />
+      <SolidColorBrush x:Key="ReaderForeground" Color="#30312F" />
+      <SolidColorBrush x:Key="ReaderSecondary" Color="#70716D" />
+      <SolidColorBrush x:Key="ReaderDivider" Color="#E4E4E0" />
+      <SolidColorBrush x:Key="ReaderAccent" Color="#D43D32" />
+      <SolidColorBrush x:Key="ReaderActiveBackground" Color="#D43D32" />
+      <SolidColorBrush x:Key="ReaderSelection" Color="#DCE0DB" />
+      <FontFamily x:Key="HeadlineFont">ms-appx:///Assets/Fonts/BarlowCondensed-SemiBold.ttf#Barlow Condensed SemiBold</FontFamily>
+      <FontFamily x:Key="ReadingFont">ms-appx:///Assets/Fonts/SourceSans3-Regular.ttf#Source Sans 3</FontFamily>
+      <Style x:Key="ToolButton" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Width" Value="38" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Foreground" Value="{StaticResource ReaderForeground}" />
+      </Style>
+      <Style x:Key="ArticleContainer" TargetType="ListViewItem">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="8,0,8,0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="BorderThickness" Value="0" />
+      </Style>
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

@@ -1,0 +1,87 @@
+name: Windows packages
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build installer and portable ZIP
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      # Cache only downloaded dependencies. WinUI intermediates/PRI/XBF and packages are rebuilt.
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-nuget-win-x64-v1-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-win-x64-v1-
+
+      - name: Restore test dependencies
+        run: |
+          dotnet restore tests/Unread.Core.Tests/Unread.Core.Tests.csproj
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run tests
+        run: dotnet test tests/Unread.Core.Tests/Unread.Core.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=core.trx" --results-directory TestResults
+
+      - name: Restore Windows application
+        run: dotnet restore src/Unread.App/Unread.App.csproj -r win-x64 -p:Platform=x64
+
+      - name: Build installer and ZIP
+        run: ./scripts/Package.ps1 -Version "0.1.$env:GITHUB_RUN_NUMBER" -NoRestore
+
+      - name: Verify installer payload
+        run: |
+          $installer = Get-Item "artifacts/packages/Unread-0.1.$env:GITHUB_RUN_NUMBER-win-x64-setup.exe"
+          $installDirectory = Join-Path $env:RUNNER_TEMP 'Unread-installer-check'
+          $setup = Start-Process -FilePath $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/NOICONS', "/DIR=`"$installDirectory`"") -WindowStyle Hidden -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Installer failed with exit code $($setup.ExitCode)." }
+          foreach ($file in @('Unread.App.exe', 'Unread.App.dll', 'Unread.Core.dll', 'Unread.App.pri', 'App.xbf', 'MainWindow.xbf', 'Assets/Unread.ico')) {
+            if (!(Test-Path -LiteralPath (Join-Path $installDirectory $file) -PathType Leaf)) { throw "Installed payload is missing $file." }
+          }
+          $uninstall = Start-Process -FilePath (Join-Path $installDirectory 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -WindowStyle Hidden -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller failed with exit code $($uninstall.ExitCode)." }
+          if (Test-Path -LiteralPath (Join-Path $installDirectory 'Unread.App.exe')) { throw 'Uninstaller left the application executable behind.' }
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Unread-Windows-x64-${{ github.run_number }}
+          path: |
+            artifacts/packages/Unread-0.1.${{ github.run_number }}-win-x64-setup.exe
+            artifacts/packages/Unread-0.1.${{ github.run_number }}-win-x64.zip
+            artifacts/packages/Unread-0.1.${{ github.run_number }}-SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Test-results-${{ github.run_number }}
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,0 +1,13 @@
+.tools/
+.nuget/
+.impeccable/
+DESIGN.md
+PRODUCT.md
+**/bin/
+**/obj/
+.vs/
+artifacts/
+TestResults/
+*.user
+*.log
+docs/reference/*.png
