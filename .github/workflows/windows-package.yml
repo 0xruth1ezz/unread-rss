@@ -2,7 +2,13 @@ name: Windows packages
 
 on:
   push:
+    branches: [master]
   workflow_dispatch:
+
+# Only the newest queued push is retained. Do not cancel an in-flight release update.
+concurrency:
+  group: windows-nightly
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -10,6 +16,8 @@ permissions:
 jobs:
   build:
     name: Build installer and portable ZIP
+    permissions:
+      contents: write
     runs-on: windows-2025
     timeout-minutes: 30
     defaults:
@@ -44,7 +52,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run tests
-        run: dotnet test tests/Unread.Core.Tests/Unread.Core.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=core.trx" --results-directory TestResults
+        run: |
+          ./tests/Nightly.Release.Tests.ps1
+          dotnet test tests/Unread.Core.Tests/Unread.Core.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=core.trx" --results-directory TestResults
 
       - name: Restore Windows application
         run: dotnet restore src/Unread.App/Unread.App.csproj -r win-x64 -p:Platform=x64
@@ -65,17 +75,11 @@ jobs:
           if ($uninstall.ExitCode -ne 0) { throw "Uninstaller failed with exit code $($uninstall.ExitCode)." }
           if (Test-Path -LiteralPath (Join-Path $installDirectory 'Unread.App.exe')) { throw 'Uninstaller left the application executable behind.' }
 
-      - name: Upload Windows packages
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Unread-Windows-x64-${{ github.run_number }}
-          path: |
-            artifacts/packages/Unread-0.1.${{ github.run_number }}-win-x64-setup.exe
-            artifacts/packages/Unread-0.1.${{ github.run_number }}-win-x64.zip
-            artifacts/packages/Unread-0.1.${{ github.run_number }}-SHA256SUMS.txt
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
+      - name: Update pinned nightly release
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/Publish-Nightly.ps1 -Repository $env:GITHUB_REPOSITORY -Commit $env:GITHUB_SHA -Version "0.1.$env:GITHUB_RUN_NUMBER"
 
       - name: Upload test results
         if: always()
