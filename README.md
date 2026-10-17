@@ -61,7 +61,7 @@ Read/save changes are persisted before transmission and queued when offline. Syn
 
 ## Reading
 
-- Three panes with collapsible folders and a focused reading view.
+- Three resizable panes with collapsible folders and a focused reading view. Drag either divider to adjust neighboring columns; widths are remembered. Tab to a divider and use Left/Right (8 pixels), Page Up/Down (32 pixels), or Home/End (minimum/maximum).
 - Native selectable article text, headings, images, emphasis, quotations and web links. Article content never executes scripts.
 - Paper, Dusk and Campfire themes; adjustable text size and optional mark-as-read on open.
 - Compact windows show the feed and article lists, then open the reader with a Back button.
@@ -85,7 +85,7 @@ Single-letter shortcuts are suppressed while typing. Settings, credentials and a
 
 - `src/Unread.App`: native XAML interface, article rendering, account UI, DPAPI credentials.
 - `src/Unread.Core`: RSS/Atom parsing, website feed discovery, article extraction, OPML import/export, Feedly client, atomic cache storage and persistent mutation queue.
-- `tests/Unread.Core.Tests`: local subscription/OPML round trips, URL validation, RSS/Atom content, discovery, article extraction, read/bookmark preservation, persistence, plus Feedly request and offline-queue checks.
+- `tests/Unread.Core.Tests`: local subscription/OPML round trips, URL validation, RSS/Atom content, discovery, article extraction, read/bookmark preservation, persistence, pane resizing constraints, plus Feedly request and offline-queue checks.
 
 Tests use an in-memory HTTP handler; no real Feedly account is contacted. A live account sync has not been verified without user credentials. Use `Unread.App.exe --demo` to force demo mode without changing an existing account connection, and `--compact` to open a 900-pixel-wide window. Developers can use `--data-dir <absolute-folder>` for an isolated library during UI verification.
 

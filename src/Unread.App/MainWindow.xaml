@@ -11,6 +11,26 @@
       <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="Transparent" />
       <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPointerOverBrush" Color="Transparent" />
       <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPressedBrush" Color="Transparent" />
+      <Style x:Key="PaneResizerStyle" TargetType="local:PaneResizer">
+        <Setter Property="FocusVisualPrimaryBrush" Value="{StaticResource ReaderAccent}" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="local:PaneResizer">
+              <Grid Background="Transparent">
+                <VisualStateManager.VisualStateGroups>
+                  <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver"><VisualState.Setters><Setter Target="Grip.Background" Value="{StaticResource ReaderAccent}" /><Setter Target="Grip.Opacity" Value="1" /></VisualState.Setters></VisualState>
+                    <VisualState x:Name="Pressed"><VisualState.Setters><Setter Target="Grip.Background" Value="{StaticResource ReaderAccent}" /><Setter Target="Grip.Opacity" Value="1" /></VisualState.Setters></VisualState>
+                  </VisualStateGroup>
+                </VisualStateManager.VisualStateGroups>
+                <Border Width="1" Background="{StaticResource ReaderDivider}" HorizontalAlignment="Center" />
+                <Border x:Name="Grip" Width="3" Height="36" CornerRadius="1.5" Background="{StaticResource ReaderSecondary}" Opacity="0.6" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Grid>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
     </Grid.Resources>
     <Grid.KeyboardAccelerators>
       <KeyboardAccelerator Key="R" Modifiers="Control" Invoked="OnRefreshShortcut" />
@@ -84,14 +104,16 @@
 
     <InfoBar x:Name="Notice" Grid.Row="2" IsOpen="False" IsClosable="True" Severity="Warning" />
 
-    <Grid Grid.Row="3">
+    <Grid x:Name="PaneGrid" Grid.Row="3">
       <Grid.ColumnDefinitions>
         <ColumnDefinition x:Name="SidebarColumn" Width="248" />
+        <ColumnDefinition x:Name="SidebarDividerColumn" Width="8" />
         <ColumnDefinition x:Name="ListColumn" Width="390" />
-        <ColumnDefinition Width="*" />
+        <ColumnDefinition x:Name="ListDividerColumn" Width="8" />
+        <ColumnDefinition x:Name="ReaderColumn" Width="*" />
       </Grid.ColumnDefinitions>
 
-      <Grid x:Name="Sidebar" Background="{StaticResource ReaderSidebar}" BorderBrush="{StaticResource ReaderDivider}" BorderThickness="0,0,1,0">
+      <Grid x:Name="Sidebar" Background="{StaticResource ReaderSidebar}">
         <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="12,24,12,20" Spacing="3">
@@ -103,7 +125,7 @@
                   <Border Background="{Binding Background}" CornerRadius="5" Padding="12,10">
                     <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                       <FontIcon Glyph="{Binding Glyph}" FontSize="16" Foreground="{StaticResource ReaderAccent}" />
-                      <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="14" Foreground="{StaticResource ReaderForeground}" />
+                      <TextBlock Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" FontSize="14" Foreground="{StaticResource ReaderForeground}" />
                       <TextBlock Grid.Column="2" Text="{Binding CountLabel}" FontSize="13" Foreground="{StaticResource ReaderAccent}" />
                     </Grid>
                   </Border>
@@ -119,7 +141,7 @@
             <Button x:Name="AccountButton" Click="OnAccount" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0" Padding="10,8">
               <Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <FontIcon Glyph="&#xE77B;" FontSize="17" Foreground="{StaticResource ReaderAccent}" />
-                <TextBlock x:Name="AccountLabel" Grid.Column="1" Text="Connect Feedly" FontSize="14" Foreground="{StaticResource ReaderForeground}" />
+                <TextBlock x:Name="AccountLabel" Grid.Column="1" Text="Connect Feedly" TextTrimming="CharacterEllipsis" FontSize="14" Foreground="{StaticResource ReaderForeground}" />
                 <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="10" Foreground="{StaticResource ReaderSecondary}" />
               </Grid>
             </Button>
@@ -128,7 +150,9 @@
         </Border>
       </Grid>
 
-      <Grid x:Name="ArticleListPane" Grid.Column="1" BorderBrush="{StaticResource ReaderDivider}" BorderThickness="0,0,1,0">
+      <local:PaneResizer x:Name="SidebarResizer" Grid.Column="1" Style="{StaticResource PaneResizerStyle}" ResizeRequested="OnPaneResize" AutomationProperties.Name="Sidebar width" AutomationProperties.HelpText="Drag or use Left and Right arrow keys to resize the sidebar and article list." ToolTipService.ToolTip="Resize sidebar · drag or use arrow keys" />
+
+      <Grid x:Name="ArticleListPane" Grid.Column="2">
         <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <ListView x:Name="ArticleList" SelectionChanged="OnArticleSelected" IsItemClickEnabled="True" ItemClick="OnArticleActivated" ContainerContentChanging="OnArticleContainerChanging" ItemContainerStyle="{StaticResource ArticleContainer}" SelectionMode="Single" Padding="0,10,0,10" HorizontalContentAlignment="Stretch">
           <ListView.ItemTemplate>
@@ -162,7 +186,9 @@
         </Border>
       </Grid>
 
-      <Grid x:Name="ReaderPane" Grid.Column="2">
+      <local:PaneResizer x:Name="ListResizer" Grid.Column="3" Style="{StaticResource PaneResizerStyle}" ResizeRequested="OnPaneResize" AutomationProperties.Name="Article list width" AutomationProperties.HelpText="Drag or use Left and Right arrow keys to resize the article list and reading pane." ToolTipService.ToolTip="Resize article list and reader · drag or use arrow keys" />
+
+      <Grid x:Name="ReaderPane" Grid.Column="4">
         <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="*" /><RowDefinition Height="28" /></Grid.RowDefinitions>
         <Grid Margin="22,4,22,0">
           <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>

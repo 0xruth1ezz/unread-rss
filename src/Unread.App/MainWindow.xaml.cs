@@ -66,6 +66,7 @@ public sealed partial class MainWindow : Window
         {
             SizeInitialWindow();
             _settings = await _store.LoadSettingsAsync();
+            ApplyLayout();
             ThemeChoice.SelectedIndex = _settings.Theme switch { "Dusk" => 1, "Campfire" => 2, _ => 0 };
             FontSlider.Value = _settings.FontSize;
             AutoReadToggle.IsOn = _settings.MarkReadOnOpen;
@@ -578,22 +579,6 @@ public sealed partial class MainWindow : Window
     private void OnToggleSidebar(object sender, RoutedEventArgs e) { _sidebarHidden = !_sidebarHidden; ApplyLayout(); }
     private void OnToggleFocus(object sender, RoutedEventArgs e) { _focus = !_focus; ApplyLayout(); }
     private void OnReaderBack(object sender, RoutedEventArgs e) { _compactReader = false; _focus = false; ApplyLayout(); }
-    private void ApplyLayout()
-    {
-        if (Sidebar is null) return;
-        var compact = Root.ActualWidth < 1100;
-        var showReader = _focus || !compact || _compactReader;
-        var sidebar = !_focus && !_sidebarHidden && (!compact || !_compactReader);
-        Sidebar.Visibility = sidebar ? Visibility.Visible : Visibility.Collapsed;
-        SidebarColumn.Width = new(sidebar ? (compact ? 220 : 248) : 0);
-        ArticleListPane.Visibility = _focus || (compact && _compactReader) ? Visibility.Collapsed : Visibility.Visible;
-        ListColumn.Width = _focus || (compact && _compactReader) ? new(0) : compact ? new(1, GridUnitType.Star) : new(390);
-        ReaderPane.Visibility = showReader ? Visibility.Visible : Visibility.Collapsed;
-        ((Grid)ReaderPane.Parent).ColumnDefinitions[2].Width = showReader ? new(1, GridUnitType.Star) : new(0);
-        BackButton.Visibility = compact && showReader ? Visibility.Visible : Visibility.Collapsed;
-        ArticleContent.Margin = new Thickness(compact ? 36 : 48, 35, compact ? 36 : 48, 64);
-        SearchBox.Width = Root.ActualWidth < 900 ? 180 : 228;
-    }
 
     private bool TextInputFocused => FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox or PasswordBox;
     private async void OnRefreshShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; await RefreshAsync(); }
