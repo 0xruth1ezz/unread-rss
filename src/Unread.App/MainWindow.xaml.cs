@@ -334,23 +334,25 @@ public sealed partial class MainWindow : Window
         finally { _accountGate.Release(); }
     }
 
-    private async void OnArticleSelected(object sender, SelectionChangedEventArgs e)
+    private void OnArticleSelected(object sender, SelectionChangedEventArgs e)
     {
         foreach (var row in _rows) row.Selected = ReferenceEquals(row, ArticleList.SelectedItem);
         if (ArticleList.SelectedItem is not ArticleRow selected) return;
         _selected = selected.Article;
         UpdateReader(); ReaderScroll.ChangeView(null, 0, null, true);
         if (Root.ActualWidth < 1100) { _compactReader = true; ApplyLayout(); }
-        if (_settings.MarkReadOnOpen && _selected.IsUnread)
-        { try { await ChangeAsync(_selected, "read", true); } catch (Exception ex) { ShowError(ex); } }
     }
 
-    private void OnArticleActivated(object sender, ItemClickEventArgs e)
+    private async void OnArticleActivated(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is not ArticleRow row) return;
-        if (!ReferenceEquals(ArticleList.SelectedItem, row)) { ArticleList.SelectedItem = row; return; }
+        if (!ReferenceEquals(ArticleList.SelectedItem, row)) ArticleList.SelectedItem = row;
         // The selected article is already rendered. Back only hides its pane.
         if (Root.ActualWidth < 1100 && !_compactReader) { _compactReader = true; ApplyLayout(); }
+        // Selection also changes during source switches, refreshes and window resizing.
+        // Only explicit item activation may apply the automatic-read preference.
+        if (_settings.MarkReadOnOpen && row.Article.IsUnread)
+        { try { await ChangeAsync(row.Article, "read", true); } catch (Exception ex) { ShowError(ex); } }
     }
 
     private async void OnMainNavigation(object sender, SelectionChangedEventArgs e)

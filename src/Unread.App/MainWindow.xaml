@@ -90,7 +90,7 @@
                   <ComboBoxItem Content="Paper" /><ComboBoxItem Content="Dusk" /><ComboBoxItem Content="Campfire" />
                 </ComboBox>
                 <Slider x:Name="FontSlider" Header="Article text size" Minimum="16" Maximum="28" StepFrequency="1" Value="20" ValueChanged="OnFontChanged" />
-                <ToggleSwitch x:Name="AutoReadToggle" Header="Mark as read when opened" IsOn="True" Toggled="OnAutoReadChanged" />
+                <ToggleSwitch x:Name="AutoReadToggle" Header="Mark as read on article click" IsOn="True" Toggled="OnAutoReadChanged" />
                 <TextBlock Text="F11 hides the feed and article lists." TextWrapping="Wrap" FontSize="12" Opacity="0.7" />
               </StackPanel>
             </Flyout>
