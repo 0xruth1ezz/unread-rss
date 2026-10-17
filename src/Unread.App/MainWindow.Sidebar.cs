@@ -196,9 +196,9 @@ public sealed partial class MainWindow
             if (_local) await _localStore.SaveAsync(edited);
             _library = edited;
             if (expandFolder is not null) _collapsedFolders.Remove(expandFolder);
-            var validView = _view is "unread" or "all" or "saved" || _view == LocalLibrary.SavedLinksId
+            var validView = _view is "all" or "saved" || _view == LocalLibrary.SavedLinksId
                 || _library.Subscriptions.Any(s => s.Id == _view) || _library.Folders.Any(f => f.Id == _view);
-            if (!validView) { ClearArticleSelection(); _view = "unread"; _viewLabel = "Unread Articles"; SelectUnreadNavigation(); }
+            if (!validView) { ClearArticleSelection(); _view = "all"; _viewLabel = "Articles"; SelectArticlesNavigation(); }
             if (_library.Folders.FirstOrDefault(f => f.Id == _view) is { } folder) _viewLabel = folder.Label;
             ViewTitle.Text = _viewLabel;
             BuildFeedNavigation();

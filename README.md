@@ -69,6 +69,7 @@ Read/save changes are persisted before transmission and queued when offline. Syn
 - Native selectable article text, headings, images, emphasis, quotations and web links. Article content never executes scripts.
 - Paper, Dusk and Campfire themes; adjustable text size and optional mark-as-read on article click. Programmatic selection, refresh and search leave read status unchanged. Keyboard selection and previous/next navigation only preview articles; an explicit item activation or read-status action changes read status.
 - Compact windows show the feed and article lists, then open the reader with a Back button.
+- All / Unread above the article list filters every source, including folders, saved articles and saved links. It defaults to All and remembers one global choice across sources, libraries and restarts. Articles in the sidebar replaces the separate All/Unread destinations; filtering never changes read status or automatically selects an article.
 - Switching feeds, folders or main destinations clears article selection and leaves the reading pane blank until you choose an article. Startup and window resizing do not select the first article. Refreshing the same source preserves an existing selection when that article is still available; an empty local library retains its Add/Import invitation.
 - Click an article's title to open its original source in your default browser, or copy its link from the toolbar.
 

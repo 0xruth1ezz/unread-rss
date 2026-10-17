@@ -75,7 +75,7 @@
         </Button>
       </StackPanel>
       <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-        <TextBlock x:Name="ViewTitle" Text="Unread Articles" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" FontSize="15" Foreground="{StaticResource ReaderForeground}" />
+        <TextBlock x:Name="ViewTitle" Text="Articles" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" FontSize="15" Foreground="{StaticResource ReaderForeground}" />
         <TextBlock x:Name="ViewSubtitle" Text="Demo library" TextTrimming="CharacterEllipsis" FontSize="11" Foreground="{StaticResource ReaderSecondary}" />
       </StackPanel>
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="8,0,18,0" VerticalAlignment="Center">
@@ -160,8 +160,17 @@
       <local:PaneResizer x:Name="SidebarResizer" Grid.Column="1" Style="{StaticResource PaneResizerStyle}" ResizeRequested="OnPaneResize" AutomationProperties.Name="Sidebar width" AutomationProperties.HelpText="Drag or use Left and Right arrow keys to resize the sidebar and article list." ToolTipService.ToolTip="Resize sidebar · drag or use arrow keys" />
 
       <Grid x:Name="ArticleListPane" Grid.Column="2">
-        <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-        <ListView x:Name="ArticleList" SelectionChanged="OnArticleSelected" IsItemClickEnabled="True" ItemClick="OnArticleActivated" ContainerContentChanging="OnArticleContainerChanging" ItemContainerStyle="{StaticResource ArticleContainer}" SelectionMode="Single" Padding="0,10,0,10" HorizontalContentAlignment="Stretch">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Border BorderBrush="{StaticResource ReaderDivider}" BorderThickness="0,0,0,1" Padding="8,6">
+          <SelectorBar x:Name="ArticleFilter" SelectionChanged="OnArticleFilterChanged" AutomationProperties.Name="Article filter" AutomationProperties.HelpText="Show all or unread articles across every source. This choice is remembered.">
+            <SelectorBar.Resources>
+              <StaticResource x:Key="SelectorBarItemPillFill" ResourceKey="ReaderAccent" />
+            </SelectorBar.Resources>
+            <SelectorBarItem x:Name="AllFilterItem" Text="All" IsSelected="True" />
+            <SelectorBarItem x:Name="UnreadFilterItem" Text="Unread" />
+          </SelectorBar>
+        </Border>
+        <ListView x:Name="ArticleList" Grid.Row="1" SelectionChanged="OnArticleSelected" IsItemClickEnabled="True" ItemClick="OnArticleActivated" ContainerContentChanging="OnArticleContainerChanging" ItemContainerStyle="{StaticResource ArticleContainer}" SelectionMode="Single" Padding="0,10,0,10" HorizontalContentAlignment="Stretch">
           <ListView.ItemTemplate>
             <DataTemplate x:DataType="local:ArticleRow">
               <Border Background="{Binding Background}" BorderBrush="{Binding Divider}" BorderThickness="0,0,0,1" Padding="14,17" CornerRadius="6" Margin="0,2">
@@ -180,12 +189,12 @@
             </DataTemplate>
           </ListView.ItemTemplate>
         </ListView>
-        <StackPanel x:Name="EmptyList" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="28" Visibility="Collapsed">
+        <StackPanel x:Name="EmptyList" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="28" Visibility="Collapsed">
           <FontIcon Glyph="&#xE8FB;" FontSize="28" Foreground="{StaticResource ReaderAccent}" />
           <TextBlock x:Name="EmptyTitle" Text="You're all caught up." FontFamily="{StaticResource HeadlineFont}" FontSize="26" TextAlignment="Center" Foreground="{StaticResource ReaderForeground}" />
           <TextBlock x:Name="EmptyDescription" Text="A little room for something else." FontSize="14" TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource ReaderSecondary}" />
         </StackPanel>
-        <Border Grid.Row="1" BorderBrush="{StaticResource ReaderDivider}" BorderThickness="0,1,0,0" Padding="18,10">
+        <Border Grid.Row="2" BorderBrush="{StaticResource ReaderDivider}" BorderThickness="0,1,0,0" Padding="18,10">
           <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <TextBlock x:Name="ArticleCount" Text="" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource ReaderSecondary}" />
             <Button x:Name="LoadMoreButton" Grid.Column="1" Content="Load more" Click="OnLoadMore" Visibility="Collapsed" Padding="9,3" FontSize="12" Background="Transparent" BorderThickness="0" Foreground="{StaticResource ReaderAccent}" />

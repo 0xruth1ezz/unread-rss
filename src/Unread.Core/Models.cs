@@ -60,6 +60,7 @@ public sealed class ReaderSettings
     public string Theme { get; set; } = "Paper";
     public double FontSize { get; set; } = 20;
     public bool MarkReadOnOpen { get; set; } = true;
+    public bool UnreadOnly { get; set; }
     public double SidebarWidth { get; set; } = PaneLayout.DefaultSidebarWidth;
     public double ArticleListWidth { get; set; } = PaneLayout.DefaultArticleListWidth;
 }

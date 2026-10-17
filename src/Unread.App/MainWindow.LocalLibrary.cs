@@ -31,9 +31,9 @@ public sealed partial class MainWindow
     private void ResetLibraryView()
     {
         ClearArticleSelection();
-        _continuation = null; _view = "unread"; _viewLabel = "Unread Articles";
+        _continuation = null; _view = "all"; _viewLabel = "Articles";
         SearchBox.Text = ""; ViewTitle.Text = _viewLabel; Notice.IsOpen = false;
-        SelectUnreadNavigation(); BuildFeedNavigation(); ShowLocalArticles(); UpdateAccount(); ApplyLayout();
+        SelectArticlesNavigation(); BuildFeedNavigation(); ShowLocalArticles(); UpdateAccount(); ApplyLayout();
     }
 
     private void OnAccount(object sender, RoutedEventArgs e)
@@ -204,7 +204,7 @@ public sealed partial class MainWindow
             {
                 _selected = _library.Articles.FirstOrDefault(a => a.Id == addedKey);
                 _suppressNavigation = true;
-                try { MainNavigation.SelectedItem = _navigation[2]; }
+                try { MainNavigation.SelectedItem = _navigation.Single(item => item.Key == "saved"); }
                 finally { _suppressNavigation = false; }
                 await NavigateAsync("saved", "Saved Articles", contentChanged: true);
                 ArticleList.SelectedItem = _rows.FirstOrDefault(r => r.Article.Id == addedKey);

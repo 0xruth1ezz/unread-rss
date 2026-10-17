@@ -8,8 +8,10 @@ namespace Unread.Core.Tests;
 
 public sealed class FeedlyTests
 {
-    [Fact]
-    public async Task Streams_encode_ids_and_continuations_and_preserve_content()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Streams_encode_ids_read_filters_and_continuations_and_preserve_content(bool unreadOnly)
     {
         var handler = new StubHandler(_ => new(HttpStatusCode.OK) { Content = new StringContent("""
             {"continuation":"next/page+2","items":[{"id":"entry/1","title":"A &amp; B","published":1700000000000,"unread":false,
@@ -17,10 +19,10 @@ public sealed class FeedlyTests
               "alternate":[{"href":"https://example.com/story"}],"tags":[{"id":"user/abc/tag/global.saved"}]}]}
             """) });
         var client = new FeedlyClient(new(handler), () => "test-token");
-        var page = await client.GetStreamAsync("feed/https://example.com/rss?a=b&c=d", true, "next/a+b");
+        var page = await client.GetStreamAsync("feed/https://example.com/rss?a=b&c=d", unreadOnly, "next/a+b");
         Assert.Contains("streamId=feed%2Fhttps%3A%2F%2Fexample.com%2Frss%3Fa%3Db%26c%3Dd", handler.Requests[0].Uri);
         Assert.Contains("continuation=next%2Fa%2Bb", handler.Requests[0].Uri);
-        Assert.Contains("unreadOnly=true", handler.Requests[0].Uri);
+        Assert.Contains("unreadOnly=" + unreadOnly.ToString().ToLowerInvariant(), handler.Requests[0].Uri);
         Assert.Equal("Bearer test-token", handler.Requests[0].Authorization);
         Assert.Equal("next/page+2", page.Continuation);
         var article = Assert.Single(page.Items);

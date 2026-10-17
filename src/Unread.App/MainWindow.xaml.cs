@@ -24,12 +24,12 @@ public sealed partial class MainWindow : Window
     private readonly FeedlyClient _feedly;
     private readonly SyncEngine _sync;
     private readonly ObservableCollection<ArticleRow> _rows = [];
-    private readonly List<NavigationItem> _navigation = [new("Unread Articles", "\uEA3A", "unread"), new("All Articles", "\uE8FD", "all"), new("Saved Articles", "\uE734", "saved")];
+    private readonly List<NavigationItem> _navigation = [new("Articles", "\uE8FD", "all"), new("Saved Articles", "\uE734", "saved")];
     private LibrarySnapshot _library = new();
     private ReaderSettings _settings = new();
     private string? _token;
     private bool _demo = true, _ready, _busy, _focus, _sidebarHidden, _compactReader;
-    private string _view = "unread", _viewLabel = "Unread Articles";
+    private string _view = "all", _viewLabel = "Articles";
     private string? _continuation;
     private CancellationTokenSource? _navigationCancellation;
     private int _viewVersion;
@@ -66,6 +66,7 @@ public sealed partial class MainWindow : Window
         {
             SizeInitialWindow();
             _settings = await _store.LoadSettingsAsync();
+            ArticleFilter.SelectedItem = _settings.UnreadOnly ? UnreadFilterItem : AllFilterItem;
             ApplyLayout();
             ThemeChoice.SelectedIndex = _settings.Theme switch { "Dusk" => 1, "Campfire" => 2, _ => 0 };
             FontSlider.Value = _settings.FontSize;
@@ -80,7 +81,7 @@ public sealed partial class MainWindow : Window
             else if (Environment.GetCommandLineArgs().Contains("--demo")) _library = DemoLibrary.Create();
             else { _library = await _localStore.LoadAsync() ?? new(); _demo = false; _local = true; }
             _ready = true;
-            SelectUnreadNavigation();
+            SelectArticlesNavigation();
             BuildFeedNavigation();
             UpdateCounts();
             ShowLocalArticles();
@@ -106,17 +107,17 @@ public sealed partial class MainWindow : Window
         ApplyLayout();
     }
 
-    private void SelectUnreadNavigation()
+    private void SelectArticlesNavigation()
     {
         _suppressNavigation = true;
         MainNavigation.SelectedIndex = 0;
         _suppressNavigation = false;
-        foreach (var item in _navigation) { item.Selected = item.Key == "unread"; item.Refresh(); }
+        foreach (var item in _navigation) { item.Selected = item.Key == "all"; item.Refresh(); }
     }
 
     private string StreamId => _view switch
     {
-        "unread" or "all" => $"user/{_library.UserId}/category/global.all",
+        "all" => $"user/{_library.UserId}/category/global.all",
         "saved" => $"user/{_library.UserId}/tag/global.saved",
         _ => _view
     };
@@ -137,7 +138,7 @@ public sealed partial class MainWindow : Window
         SetBusy(true);
         try
         {
-            var page = await _feedly.GetStreamAsync(StreamId, _view == "unread", ct: _navigationCancellation.Token);
+            var page = await _feedly.GetStreamAsync(StreamId, _settings.UnreadOnly, ct: _navigationCancellation.Token);
             if (version != _viewVersion) return;
             SyncEngine.Merge(_library, page.Items);
             _continuation = page.Continuation;
@@ -176,7 +177,7 @@ public sealed partial class MainWindow : Window
             await _sync.FlushAsync(_library);
             var subscriptions = _feedly.GetSubscriptionsAsync();
             var counts = _feedly.GetUnreadCountsAsync();
-            var page = _feedly.GetStreamAsync(StreamId, _view == "unread");
+            var page = _feedly.GetStreamAsync(StreamId, _settings.UnreadOnly);
             await Task.WhenAll(subscriptions, counts, page);
             _library.Subscriptions = await subscriptions;
             _library.UnreadCounts = await counts;
@@ -192,35 +193,19 @@ public sealed partial class MainWindow : Window
         finally { SetBusy(false); _accountGate.Release(); }
     }
 
-    private IEnumerable<Article> FilteredArticles()
-    {
-        IEnumerable<Article> articles = _library.Articles;
-        if (_view == "unread") articles = articles.Where(a => a.IsUnread);
-        else if (_view == "saved") articles = articles.Where(a => a.IsSaved);
-        else if (_view != "all")
-        {
-            var feedIds = SidebarOrganization.FeedIds(_library, _view);
-            if (_local && _view == LocalLibrary.SavedLinksId) feedIds.Add(LocalLibrary.SavedLinksId);
-            articles = articles.Where(a => feedIds.Contains(a.FeedId));
-        }
-        var query = SearchBox.Text.Trim();
-        if (query.Length > 0)
-            articles = articles.Where(a => a.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                || a.FeedTitle.Contains(query, StringComparison.CurrentCultureIgnoreCase) || a.Summary.Contains(query, StringComparison.CurrentCultureIgnoreCase));
-        return articles.OrderByDescending(a => a.Published);
-    }
+    private IEnumerable<Article> FilteredArticles() => ArticleQuery.Apply(_library, _view, _settings.UnreadOnly, SearchBox.Text);
 
     private void ShowLocalArticles()
     {
         var selectedId = _selected?.Id;
         _rows.Clear();
         foreach (var article in FilteredArticles()) _rows.Add(new(article));
-        ArticleCount.Text = $"{_rows.Count} article{(_rows.Count == 1 ? "" : "s")}{(SearchBox.Text.Length > 0 ? " found" : "")}";
+        ArticleCount.Text = $"{_rows.Count}{(_settings.UnreadOnly ? " unread" : "")} article{(_rows.Count == 1 ? "" : "s")}{(SearchBox.Text.Length > 0 ? " found" : "")}";
         LoadMoreButton.Visibility = !_demo && !_local && _continuation is not null ? Visibility.Visible : Visibility.Collapsed;
         EmptyList.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         var firstUse = _local && _library.Subscriptions.Count == 0 && _library.Articles.Count == 0;
-        EmptyTitle.Text = SearchBox.Text.Length > 0 ? "No matching articles." : firstUse ? "Make room for good reading." : _view == "saved" ? "Keep something good." : "You're all caught up.";
-        EmptyDescription.Text = SearchBox.Text.Length > 0 ? "Try another word in your loaded articles." : firstUse ? "Add a feed or article link, or import your subscriptions from OPML." : _view == "saved" ? "Save an article to return to it here." : _local ? "Refresh your feeds or explore All Articles." : "Sync Feedly or explore All Articles.";
+        EmptyTitle.Text = SearchBox.Text.Length > 0 ? "No matching articles." : firstUse ? "Make room for good reading." : _settings.UnreadOnly ? "You're all caught up." : _view == "saved" ? "Keep something good." : "No articles yet.";
+        EmptyDescription.Text = SearchBox.Text.Length > 0 ? "Try another word in your loaded articles." : firstUse ? "Add a feed or article link, or import your subscriptions from OPML." : _settings.UnreadOnly ? "Switch to All to include read articles." : _view == "saved" ? "Save an article to return to it here." : _local ? "Refresh your feeds to check for articles." : "Sync Feedly to check for articles.";
         EmptyLibraryActions.Visibility = firstUse ? Visibility.Visible : Visibility.Collapsed;
         var selection = _rows.FirstOrDefault(r => r.Article.Id == selectedId);
         ArticleList.SelectedItem = selection;
@@ -359,7 +344,7 @@ public sealed partial class MainWindow : Window
         if (!ReferenceEquals(ArticleList.SelectedItem, row)) ArticleList.SelectedItem = row;
         // The selected article is already rendered. Back only hides its pane.
         if (Root.ActualWidth < 1100 && !_compactReader) { _compactReader = true; ApplyLayout(); }
-        // Selection also changes during source switches, refreshes and window resizing.
+        // List rebuilds and keyboard navigation also change selection.
         // Only explicit item activation may apply the automatic-read preference.
         if (_settings.MarkReadOnOpen && row.Article.IsUnread)
         { try { await ChangeAsync(row.Article, "read", true); } catch (Exception ex) { ShowError(ex); } }
@@ -369,6 +354,24 @@ public sealed partial class MainWindow : Window
     { if (_ready && !_suppressNavigation && MainNavigation.SelectedItem is NavigationItem item) await NavigateAsync(item.Key, item.Title); }
     private async void OnRefresh(object sender, RoutedEventArgs e) => await RefreshAsync();
     private void OnSearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) { if (_ready && !_suppressSearch) ShowLocalArticles(); }
+    private async void OnArticleFilterChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (!_ready || sender.SelectedItem is null) return;
+        var unreadOnly = ReferenceEquals(sender.SelectedItem, UnreadFilterItem);
+        if (_busy)
+        {
+            sender.SelectedItem = _settings.UnreadOnly ? UnreadFilterItem : AllFilterItem;
+            return;
+        }
+        if (_settings.UnreadOnly == unreadOnly) return;
+        _settings.UnreadOnly = unreadOnly;
+        ClearArticleSelection();
+        try
+        {
+            await Task.WhenAll(_store.SaveSettingsAsync(_settings), NavigateAsync(_view, _viewLabel, contentChanged: true));
+        }
+        catch (Exception ex) { ShowError(ex); }
+    }
     private async void OnToggleRead(object sender, RoutedEventArgs e)
     { if (_selected is { } article) { try { await ChangeAsync(article, "read", article.IsUnread); } catch (Exception ex) { ShowError(ex); } } }
     private async void OnToggleSaved(object sender, RoutedEventArgs e)
@@ -402,7 +405,7 @@ public sealed partial class MainWindow : Window
         SetBusy(true);
         try
         {
-            var page = await _feedly.GetStreamAsync(StreamId, _view == "unread", _continuation);
+            var page = await _feedly.GetStreamAsync(StreamId, _settings.UnreadOnly, _continuation);
             if (version != _viewVersion) return;
             SyncEngine.Merge(_library, page.Items); _continuation = page.Continuation;
             await _store.SaveAsync(_library); ShowLocalArticles();
@@ -460,7 +463,7 @@ public sealed partial class MainWindow : Window
                 if (!_demo && !_local && _library.UserId != profile.Id) throw new InvalidOperationException("Disconnect before connecting a different account.");
                 _credentials.Save(candidate); _token = candidate;
                 if (_demo || _local) _library = await _store.LoadAsync() is { } cached && cached.UserId == profile.Id ? cached : new() { UserId = profile.Id, UserName = profile.Name };
-                _demo = false; _local = false; _settings.Library = "feedly"; ClearArticleSelection(); _view = "unread"; _viewLabel = "Unread Articles";
+                _demo = false; _local = false; _settings.Library = "feedly"; ClearArticleSelection(); _view = "all"; _viewLabel = "Articles";
                 await _store.SaveAsync(_library);
                 await _store.SaveSettingsAsync(_settings);
                 input.Password = ""; args.Cancel = false;
@@ -480,14 +483,14 @@ public sealed partial class MainWindow : Window
             _credentials.Clear(); _token = null; _demo = false; _local = true; _settings.Library = "local";
             await _store.SaveAsync(new());
             await _store.SaveSettingsAsync(_settings);
-            _library = await _localStore.LoadAsync() ?? new(); ClearArticleSelection(); _view = "unread"; _viewLabel = "Unread Articles";
-            ViewTitle.Text = _viewLabel; SelectUnreadNavigation();
+            _library = await _localStore.LoadAsync() ?? new(); ClearArticleSelection(); _view = "all"; _viewLabel = "Articles";
+            ViewTitle.Text = _viewLabel; SelectArticlesNavigation();
             Notice.IsOpen = false; BuildFeedNavigation(); ShowLocalArticles(); UpdateAccount();
         }
         }
         catch (Exception ex) { ShowError(ex); return; }
         finally { _accountGate.Release(); }
-        if (result == ContentDialogResult.Primary) { ViewTitle.Text = _viewLabel; SelectUnreadNavigation(); UpdateAccount(); await RefreshAsync(); }
+        if (result == ContentDialogResult.Primary) { ViewTitle.Text = _viewLabel; SelectArticlesNavigation(); UpdateAccount(); await RefreshAsync(); }
     }
 
     private void UpdateAccount()
@@ -534,7 +537,7 @@ public sealed partial class MainWindow : Window
     {
         _busy = busy; RefreshButton.IsEnabled = LoadMoreButton.IsEnabled = AccountButton.IsEnabled = AddButton.IsEnabled = MarkAllReadButton.IsEnabled = !busy;
         NewFolderButton.IsEnabled = !busy && (_local || _demo);
-        MainNavigation.IsEnabled = !busy;
+        MainNavigation.IsEnabled = ArticleFilter.IsEnabled = !busy;
         FeedNavigation.IsHitTestVisible = !busy;
         if (busy) SyncStatus.Text = _local ? "Updating your library…" : "Syncing with Feedly…"; else UpdateAccount();
     }
