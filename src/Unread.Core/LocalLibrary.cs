@@ -44,6 +44,7 @@ public static class LocalLibrary
                 { Categories = existing.Categories.Concat(feed.Categories).DistinctBy(c => c.Id).ToList() };
             }
         }
+        SidebarOrganization.Normalize(library);
         return added;
     }
 

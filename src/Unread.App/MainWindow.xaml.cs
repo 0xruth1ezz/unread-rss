@@ -56,7 +56,7 @@ public sealed partial class MainWindow : Window
         if (presenter is not null) presenter.PreferredMinimumWidth = 760;
         ArticleList.ItemsSource = _rows;
         MainNavigation.ItemsSource = _navigation;
-        Closed += (_, _) => { _navigationCancellation?.Cancel(); _lifetime.Cancel(); };
+        Closed += (_, _) => { EndSidebarDrag(); _navigationCancellation?.Cancel(); _lifetime.Cancel(); };
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -189,7 +189,7 @@ public sealed partial class MainWindow : Window
         else if (_view == "saved") articles = articles.Where(a => a.IsSaved);
         else if (_view != "all")
         {
-            var feedIds = _library.Subscriptions.Where(s => s.Id == _view || s.Categories.Any(c => c.Id == _view)).Select(s => s.Id).ToHashSet();
+            var feedIds = SidebarOrganization.FeedIds(_library, _view);
             if (_local && _view == LocalLibrary.SavedLinksId) feedIds.Add(LocalLibrary.SavedLinksId);
             articles = articles.Where(a => feedIds.Contains(a.FeedId));
         }
@@ -221,47 +221,10 @@ public sealed partial class MainWindow : Window
 
     private void BuildFeedNavigation()
     {
-        FeedNavigation.Children.Clear();
-        _localUnreadCounts.Clear();
-        if (_demo || _local)
-        {
-            foreach (var group in _library.Articles.Where(a => a.IsUnread).GroupBy(a => a.FeedId))
-                _localUnreadCounts[group.Key] = group.Count();
-            foreach (var subscription in _library.Subscriptions)
-                foreach (var category in subscription.Categories.DistinctBy(c => c.Id))
-                    _localUnreadCounts[category.Id] = _localUnreadCounts.GetValueOrDefault(category.Id) + _localUnreadCounts.GetValueOrDefault(subscription.Id);
-        }
-        var categories = _library.Subscriptions.SelectMany(s => s.Categories).DistinctBy(c => c.Id).OrderBy(c => c.Label).ToList();
-        foreach (var category in categories)
-        {
-            var section = new StackPanel { Margin = new(0, 4, 0, 8) };
-            var feeds = new StackPanel { Spacing = 1 };
-            var heading = new Grid { ColumnSpacing = 8 };
-            heading.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) });
-            heading.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            heading.Children.Add(new TextBlock { Text = category.Label, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = Palette.Brush("ReaderSecondary") });
-            var chevron = new FontIcon { Glyph = _collapsedFolders.Contains(category.Id) ? "\uE76C" : "\uE70D", FontSize = 9, Foreground = Palette.Brush("ReaderSecondary") };
-            Grid.SetColumn(chevron, 1); heading.Children.Add(chevron);
-            var toggle = new Button { Content = heading, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Background = new SolidColorBrush(Colors.Transparent), BorderThickness = new(0), Padding = new(12, 9, 12, 9) };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, "Toggle " + category.Label + " folder");
-            feeds.Visibility = _collapsedFolders.Contains(category.Id) ? Visibility.Collapsed : Visibility.Visible;
-            toggle.Click += (_, _) => { if (!_collapsedFolders.Add(category.Id)) _collapsedFolders.Remove(category.Id); feeds.Visibility = _collapsedFolders.Contains(category.Id) ? Visibility.Collapsed : Visibility.Visible; chevron.Glyph = _collapsedFolders.Contains(category.Id) ? "\uE76C" : "\uE70D"; };
-            var all = FeedButton("All in " + category.Label, category.Id, "\uE8B7");
-            feeds.Children.Add(all);
-            foreach (var feed in _library.Subscriptions.Where(s => s.Categories.Any(c => c.Id == category.Id)).OrderBy(s => s.Title))
-                feeds.Children.Add(FeedButton(feed.Title, feed.Id));
-            section.Children.Add(toggle); section.Children.Add(feeds);
-            FeedNavigation.Children.Add(section);
-        }
-        foreach (var feed in _library.Subscriptions.Where(s => s.Categories.Count == 0).OrderBy(s => s.Title))
-            FeedNavigation.Children.Add(FeedButton(feed.Title, feed.Id));
-        if (_library.Subscriptions.Count == 0)
-            FeedNavigation.Children.Add(new TextBlock { Text = _local ? "Your feeds will appear here. Add a website or import OPML to begin." : "Your Feedly subscriptions will appear here.", TextWrapping = TextWrapping.Wrap, Margin = new(12), FontSize = 13, Foreground = Palette.Brush("ReaderSecondary") });
-        if (_local && _library.Articles.Any(a => a.FeedId == LocalLibrary.SavedLinksId))
-            FeedNavigation.Children.Add(FeedButton("Saved Links", LocalLibrary.SavedLinksId, "\uE71B"));
+        RebuildSidebar();
     }
 
-    private Button FeedButton(string title, string key, string glyph = "\uE8F3")
+    private Button FeedButton(string title, string key, string glyph = "\uE8F3", string? navigationLabel = null)
     {
         var grid = new Grid { ColumnSpacing = 10 };
         grid.ColumnDefinitions.Add(new() { Width = new(16) }); grid.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) }); grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
@@ -271,7 +234,7 @@ public sealed partial class MainWindow : Window
         var badge = new TextBlock { Text = count > 0 ? count.ToString() : "", FontSize = 12, Foreground = Palette.Brush("ReaderAccent") }; Grid.SetColumn(badge, 2); grid.Children.Add(badge);
         var button = new Button { Content = grid, Padding = new(12, 8, 10, 8), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Background = _view == key ? Palette.Brush("ReaderSelection") : new SolidColorBrush(Colors.Transparent), BorderThickness = new(0), CornerRadius = new(5) };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, title);
-        button.Click += async (_, _) => { MainNavigation.SelectedItem = null; await NavigateAsync(key, title); };
+        button.Click += async (_, _) => { if (_sidebarDragStarting || _sidebarDrag is not null) return; MainNavigation.SelectedItem = null; await NavigateAsync(key, navigationLabel ?? title); };
         if (_local && _library.Subscriptions.Any(s => s.Id == key))
         {
             var menu = new MenuFlyout();
@@ -558,6 +521,7 @@ public sealed partial class MainWindow : Window
     private void SetBusy(bool busy)
     {
         _busy = busy; RefreshButton.IsEnabled = LoadMoreButton.IsEnabled = AccountButton.IsEnabled = AddButton.IsEnabled = MarkAllReadButton.IsEnabled = !busy;
+        NewFolderButton.IsEnabled = !busy && (_local || _demo);
         MainNavigation.IsEnabled = !busy;
         FeedNavigation.IsHitTestVisible = !busy;
         if (busy) SyncStatus.Text = _local ? "Updating your library…" : "Syncing with Feedly…"; else UpdateAccount();

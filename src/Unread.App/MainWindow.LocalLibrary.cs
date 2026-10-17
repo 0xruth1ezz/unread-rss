@@ -178,6 +178,7 @@ public sealed partial class MainWindow
                             feedUrl = discovery.Feeds[0].Url; parsed = discovery.Feed;
                         }
                         var path = folder.Text.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                        if (path.Length > SidebarOrganization.MaximumDepth) throw new FormatException("Folders support up to 64 levels.");
                         var subscription = LocalLibrary.Subscription(feedUrl, categories: path.Length == 0 ? [] : [LocalLibrary.Folder(path)]);
                         parsed ??= await _web.FetchFeedAsync(subscription, _lifetime.Token);
                         subscription = subscription with { Title = string.IsNullOrWhiteSpace(parsed.Title) ? subscription.Title : parsed.Title, SiteUrl = parsed.SiteUrl };
@@ -230,13 +231,14 @@ public sealed partial class MainWindow
             if ((await file.GetBasicPropertiesAsync()).Size > 10 * 1024 * 1024) throw new FormatException("Choose an OPML file smaller than 10 MB.");
             using var stream = File.OpenRead(file.Path);
             var imported = Opml.Parse(stream);
-            if (imported.Subscriptions.Count == 0) throw new FormatException("No valid RSS or Atom subscription URLs were found in this OPML file.");
+            if (imported.Subscriptions.Count == 0 && imported.Folders.Count == 0) throw new FormatException("No feeds or folders were found in this OPML file.");
             await SwitchToLocalAsync();
-            var added = LocalLibrary.AddSubscriptions(_library, imported.Subscriptions);
+            var added = SidebarOrganization.Import(_library, imported);
             await _localStore.SaveAsync(_library);
             BuildFeedNavigation(); ShowLocalArticles();
             var summary = $"Added {added} feed{(added == 1 ? "" : "s")}; {imported.Subscriptions.Count - added} already subscribed." + (imported.Skipped > 0 ? $" Skipped {imported.Skipped} invalid feed URLs." : "");
-            await RefreshLocalAsync(summary);
+            if (imported.Subscriptions.Count > 0) await RefreshLocalAsync(summary);
+            else ShowNotice("OPML imported", $"Imported {imported.Folders.Count} folders.", InfoBarSeverity.Success);
         }
         catch (Exception ex) { ShowNotice("Could not import OPML", ex is System.Xml.XmlException ? "This file contains invalid XML. Export a new OPML subscription list and try again." : ex.Message, InfoBarSeverity.Warning); }
     }
@@ -248,13 +250,14 @@ public sealed partial class MainWindow
         {
             // Feedly uses feed/<URL> identifiers; export these without changing that account.
             var feeds = _library.Subscriptions.Select(s => !string.IsNullOrEmpty(s.FeedUrl) ? s : s.Id.StartsWith("feed/", StringComparison.Ordinal) && ArticleText.TryWebUri(s.Id[5..], out _) ? s with { FeedUrl = s.Id[5..] } : s).Where(s => s.FeedUrl.Length > 0).ToList();
-            if (feeds.Count == 0) { ShowNotice("No feeds to export", "Add or import a feed first. OPML contains subscriptions; saved article links stay in your library.", InfoBarSeverity.Informational); return; }
+            if (feeds.Count == 0 && _library.Folders.Count == 0) { ShowNotice("No feeds or folders to export", "Add a feed or folder first. Saved article links stay in your library.", InfoBarSeverity.Informational); return; }
             var picker = new FileSavePicker { SuggestedFileName = "Unread subscriptions" };
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
             picker.FileTypeChoices.Add("OPML subscriptions", new List<string> { ".opml" });
             var file = await picker.PickSaveFileAsync();
             if (file is null) return;
-            await Windows.Storage.FileIO.WriteTextAsync(file, Opml.Export(feeds));
+            var exported = SidebarOrganization.CopyForEdit(_library); exported.Subscriptions = feeds;
+            await Windows.Storage.FileIO.WriteTextAsync(file, Opml.Export(exported));
             ShowNotice("OPML exported", $"Saved {feeds.Count} subscriptions to {file.Name}.", InfoBarSeverity.Success);
         }
         catch (Exception ex) { ShowNotice("Could not export OPML", ex.Message, InfoBarSeverity.Warning); }

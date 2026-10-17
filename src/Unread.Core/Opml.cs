@@ -3,7 +3,11 @@ using System.Xml.Linq;
 
 namespace Unread.Core;
 
-public sealed record OpmlImport(List<Subscription> Subscriptions, int Skipped);
+public sealed record OpmlImport(List<Subscription> Subscriptions, int Skipped)
+{
+    public List<FeedCategory> Folders { get; init; } = [];
+    public Dictionary<string, List<string>> SidebarOrder { get; init; } = [];
+}
 
 public static class Opml
 {
@@ -30,7 +34,13 @@ public static class Opml
         var body = document.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "body")
             ?? throw new FormatException("The OPML file has no subscription list.");
         var feeds = new LibrarySnapshot();
+        var subscriptions = new List<Subscription>();
         var skipped = 0;
+        void Remember(string parent, string id)
+        {
+            if (!feeds.SidebarOrder.TryGetValue(parent, out var order)) feeds.SidebarOrder[parent] = order = [];
+            if (!order.Contains(id)) order.Add(id);
+        }
         void Visit(XElement parent, string[] path)
         {
             if (path.Length > 64) throw new FormatException("This OPML file contains more than 64 nested folders.");
@@ -45,37 +55,54 @@ public static class Opml
                     try
                     {
                         var site = ArticleText.TryWebUri(Attribute("htmlUrl"), out var siteUri) ? siteUri.AbsoluteUri : "";
-                        LocalLibrary.AddSubscriptions(feeds, [LocalLibrary.Subscription(url, title, path.Length == 0 ? [] : [LocalLibrary.Folder(path)], site)]);
+                        var subscription = LocalLibrary.Subscription(url, title, path.Length == 0 ? [] : [LocalLibrary.Folder(path)], site);
+                        subscriptions.Add(subscription);
+                        Remember(path.Length == 0 ? "" : LocalLibrary.Folder(path).Id, subscription.Id);
                     }
                     catch (FormatException) { skipped++; }
                 }
                 else if (Attribute("type").Equals("rss", StringComparison.OrdinalIgnoreCase)) skipped++;
-                else Visit(outline, string.IsNullOrWhiteSpace(title) ? path : [.. path, title]);
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(title)) { Visit(outline, path); continue; }
+                    var folderPath = path.Append(title).ToArray();
+                    var folder = feeds.Folders.FirstOrDefault(f => f.Path.SequenceEqual(folderPath, StringComparer.OrdinalIgnoreCase));
+                    if (folder is null) { folder = LocalLibrary.Folder(folderPath); feeds.Folders.Add(folder); }
+                    Remember(path.Length == 0 ? "" : LocalLibrary.Folder(path).Id, folder.Id);
+                    Visit(outline, folder.Path);
+                }
             }
         }
         Visit(body, []);
-        return new(feeds.Subscriptions, skipped);
+        LocalLibrary.AddSubscriptions(feeds, subscriptions);
+        return new(feeds.Subscriptions, skipped) { Folders = feeds.Folders, SidebarOrder = feeds.SidebarOrder };
     }
 
-    public static string Export(IEnumerable<Subscription> subscriptions)
+    public static string Export(IEnumerable<Subscription> subscriptions) => Export(new LibrarySnapshot { Subscriptions = subscriptions.ToList() });
+
+    public static string Export(LibrarySnapshot library)
     {
+        library = SidebarOrganization.CopyForEdit(library);
+        SidebarOrganization.Normalize(library);
         var body = new XElement("body");
-        foreach (var feed in subscriptions.Where(s => !string.IsNullOrEmpty(s.FeedUrl)))
+        var subscriptions = library.Subscriptions.ToDictionary(f => f.Id);
+        void WriteChildren(XElement parent, string parentId)
         {
-            foreach (var category in feed.Categories.Count == 0 ? new FeedCategory?[] { null } : feed.Categories.Cast<FeedCategory?>())
+            foreach (var entry in SidebarOrganization.Children(library, parentId))
             {
-                var parent = body;
-                foreach (var folder in category is null ? [] : category.Path.Length > 0 ? category.Path : new[] { category.Label })
+                if (entry.IsFolder)
                 {
-                    var node = parent.Elements("outline").FirstOrDefault(e => e.Attribute("xmlUrl") is null && (string?)e.Attribute("text") == folder);
-                    if (node is null) { node = new XElement("outline", new XAttribute("text", folder), new XAttribute("title", folder)); parent.Add(node); }
-                    parent = node;
+                    var folder = new XElement("outline", new XAttribute("text", entry.Title), new XAttribute("title", entry.Title));
+                    parent.Add(folder); WriteChildren(folder, entry.Id); continue;
                 }
+                var feed = subscriptions[entry.Id];
+                if (string.IsNullOrEmpty(feed.FeedUrl)) continue;
                 var outline = new XElement("outline", new XAttribute("type", "rss"), new XAttribute("text", feed.Title), new XAttribute("title", feed.Title), new XAttribute("xmlUrl", feed.FeedUrl));
                 if (!string.IsNullOrEmpty(feed.SiteUrl)) outline.Add(new XAttribute("htmlUrl", feed.SiteUrl));
                 parent.Add(outline);
             }
         }
+        WriteChildren(body, "");
         return new XDocument(new XDeclaration("1.0", "utf-8", null), new XElement("opml", new XAttribute("version", "2.0"),
             new XElement("head", new XElement("title", "Unread subscriptions")), body)).ToString();
     }

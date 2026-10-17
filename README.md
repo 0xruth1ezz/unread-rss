@@ -49,6 +49,10 @@ The app opens your **Local library**, with no account required. Use **+ (Add to 
 
 **Refresh** checks all your local feeds. Read status and bookmarks survive refreshes and app restarts. Right-click a feed to remove it; saved articles are kept. Local feeds, saved links and read state are stored in `%LOCALAPPDATA%\UnreadReader\Local`, separately from Feedly. OPML imports are limited to 10 MB; individual feed/page downloads to 8 MB. RSS 2.0, RSS 1.0/RDF and Atom 1.0 are supported.
 
+Use **New folder** beside Subscriptions in the left sidebar to create a local folder, including an empty one. Right-click a folder to create a subfolder, rename it or remove it while keeping its feeds and articles. Click a folder's name to read all feeds in its subtree; use its chevron to expand or collapse it.
+
+Drag feeds or folders to reorder them. Drop on the middle of a folder row to move inside it, or near a row's top/bottom edge to place an item before/after it. Hover over a collapsed folder to expand it; the sidebar scrolls near its edges during a drag. Drop on **Subscriptions** or **Move to top level** to move out of folders. The context menu's **Move up**, **Move down** and **Move to** actions support the same organization with a keyboard. Folder structure and ordering survive restarts and OPML export/import. Feedly folder management is not changed; demo organization stays in memory.
+
 ## Feedly connection
 
 Click **Local library** at the bottom of the sidebar, choose **Feedly account…**, and paste a valid Feedly access token. A token is verified against `/v3/profile` before it is saved. Tokens are encrypted using Windows DPAPI for the current Windows user and are never written to the cache or source tree. The same menu switches back to your local library or opens an isolated demo. Adding/importing local content switches to the local library.

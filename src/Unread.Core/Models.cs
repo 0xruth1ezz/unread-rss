@@ -46,6 +46,8 @@ public sealed class LibrarySnapshot
     public string UserId { get; set; } = "";
     public string UserName { get; set; } = "";
     public List<Subscription> Subscriptions { get; set; } = [];
+    public List<FeedCategory> Folders { get; set; } = [];
+    public Dictionary<string, List<string>> SidebarOrder { get; set; } = [];
     public List<Article> Articles { get; set; } = [];
     public Dictionary<string, int> UnreadCounts { get; set; } = [];
     public List<PendingAction> Pending { get; set; } = [];
