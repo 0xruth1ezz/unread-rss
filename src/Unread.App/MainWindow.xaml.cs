@@ -124,6 +124,7 @@ public sealed partial class MainWindow : Window
     private async Task NavigateAsync(string key, string label, bool contentChanged = false)
     {
         if (_busy || (key == _view && !contentChanged)) return;
+        if (key != _view) ClearArticleSelection();
         _view = key; _viewLabel = label; _continuation = null;
         _navigationCancellation?.Cancel();
         _navigationCancellation = new();
@@ -146,6 +147,15 @@ public sealed partial class MainWindow : Window
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (version == _viewVersion) ShowError(ex); }
         finally { if (version == _viewVersion) SetBusy(false); }
+    }
+
+    private void ClearArticleSelection()
+    {
+        _selected = null;
+        ArticleList.SelectedItem = null;
+        _compactReader = _focus = false;
+        UpdateReader();
+        ApplyLayout();
     }
 
     private async Task RefreshAsync()
@@ -213,7 +223,6 @@ public sealed partial class MainWindow : Window
         EmptyDescription.Text = SearchBox.Text.Length > 0 ? "Try another word in your loaded articles." : firstUse ? "Add a feed or article link, or import your subscriptions from OPML." : _view == "saved" ? "Save an article to return to it here." : _local ? "Refresh your feeds or explore All Articles." : "Sync Feedly or explore All Articles.";
         EmptyLibraryActions.Visibility = firstUse ? Visibility.Visible : Visibility.Collapsed;
         var selection = _rows.FirstOrDefault(r => r.Article.Id == selectedId);
-        if (selection is null && _rows.Count > 0 && Root.ActualWidth >= 1100 && SearchBox.Text.Length == 0) selection = _rows[0];
         ArticleList.SelectedItem = selection;
         if (selection is null) { _selected = null; UpdateReader(); }
         UpdateCounts();
@@ -256,7 +265,8 @@ public sealed partial class MainWindow : Window
     {
         var hasArticle = _selected is not null;
         ReaderScroll.Visibility = hasArticle ? Visibility.Visible : Visibility.Collapsed;
-        ReaderEmpty.Visibility = hasArticle ? Visibility.Collapsed : Visibility.Visible;
+        ReaderEmpty.Visibility = !hasArticle && _local && _library.Subscriptions.Count == 0 && _library.Articles.Count == 0
+            ? Visibility.Visible : Visibility.Collapsed;
         ReaderEmptyDescription.Text = _local && _library.Articles.Count == 0 ? "Your feeds and saved links, all in one place." : "Choose an article to settle in.";
         ReadButton.IsEnabled = SaveButton.IsEnabled = hasArticle;
         OpenBrowserButton.IsEnabled = CopyLinkButton.IsEnabled = _selected is { } selected && ArticleText.TryWebUri(selected.Url, out _);
@@ -450,7 +460,7 @@ public sealed partial class MainWindow : Window
                 if (!_demo && !_local && _library.UserId != profile.Id) throw new InvalidOperationException("Disconnect before connecting a different account.");
                 _credentials.Save(candidate); _token = candidate;
                 if (_demo || _local) _library = await _store.LoadAsync() is { } cached && cached.UserId == profile.Id ? cached : new() { UserId = profile.Id, UserName = profile.Name };
-                _demo = false; _local = false; _settings.Library = "feedly"; _selected = null; _view = "unread"; _viewLabel = "Unread Articles";
+                _demo = false; _local = false; _settings.Library = "feedly"; ClearArticleSelection(); _view = "unread"; _viewLabel = "Unread Articles";
                 await _store.SaveAsync(_library);
                 await _store.SaveSettingsAsync(_settings);
                 input.Password = ""; args.Cancel = false;
@@ -470,7 +480,7 @@ public sealed partial class MainWindow : Window
             _credentials.Clear(); _token = null; _demo = false; _local = true; _settings.Library = "local";
             await _store.SaveAsync(new());
             await _store.SaveSettingsAsync(_settings);
-            _library = await _localStore.LoadAsync() ?? new(); _selected = null; _view = "unread"; _viewLabel = "Unread Articles";
+            _library = await _localStore.LoadAsync() ?? new(); ClearArticleSelection(); _view = "unread"; _viewLabel = "Unread Articles";
             ViewTitle.Text = _viewLabel; SelectUnreadNavigation();
             Notice.IsOpen = false; BuildFeedNavigation(); ShowLocalArticles(); UpdateAccount();
         }
@@ -539,8 +549,6 @@ public sealed partial class MainWindow : Window
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         ApplyLayout();
-        if (_ready && _selected is null && _rows.Count > 0 && e.NewSize.Width >= 1100 && SearchBox.Text.Length == 0)
-            ArticleList.SelectedItem = _rows[0];
     }
     private void OnToggleSidebar(object sender, RoutedEventArgs e) { _sidebarHidden = !_sidebarHidden; ApplyLayout(); }
     private void OnToggleFocus(object sender, RoutedEventArgs e) { _focus = !_focus; ApplyLayout(); }

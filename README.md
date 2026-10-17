@@ -67,8 +67,9 @@ Read/save changes are persisted before transmission and queued when offline. Syn
 
 - Three resizable panes with collapsible folders and a focused reading view. Drag either divider to adjust neighboring columns; widths are remembered. Tab to a divider and use Left/Right (8 pixels), Page Up/Down (32 pixels), or Home/End (minimum/maximum).
 - Native selectable article text, headings, images, emphasis, quotations and web links. Article content never executes scripts.
-- Paper, Dusk and Campfire themes; adjustable text size and optional mark-as-read on article click. Automatic previews during source changes, refresh, search or window resizing leave read status unchanged. Keyboard selection and previous/next navigation only preview articles; an explicit item activation or read-status action changes read status.
+- Paper, Dusk and Campfire themes; adjustable text size and optional mark-as-read on article click. Programmatic selection, refresh and search leave read status unchanged. Keyboard selection and previous/next navigation only preview articles; an explicit item activation or read-status action changes read status.
 - Compact windows show the feed and article lists, then open the reader with a Back button.
+- Switching feeds, folders or main destinations clears article selection and leaves the reading pane blank until you choose an article. Startup and window resizing do not select the first article. Refreshing the same source preserves an existing selection when that article is still available; an empty local library retains its Add/Import invitation.
 - Click an article's title to open its original source in your default browser, or copy its link from the toolbar.
 
 | Key | Action |

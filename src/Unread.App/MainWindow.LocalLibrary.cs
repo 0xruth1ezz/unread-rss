@@ -30,8 +30,8 @@ public sealed partial class MainWindow
 
     private void ResetLibraryView()
     {
-        _selected = null; _continuation = null; _view = "unread"; _viewLabel = "Unread Articles";
-        _compactReader = _focus = false;
+        ClearArticleSelection();
+        _continuation = null; _view = "unread"; _viewLabel = "Unread Articles";
         SearchBox.Text = ""; ViewTitle.Text = _viewLabel; Notice.IsOpen = false;
         SelectUnreadNavigation(); BuildFeedNavigation(); ShowLocalArticles(); UpdateAccount(); ApplyLayout();
     }
