@@ -21,7 +21,7 @@ public sealed partial class MainWindow
     private async Task SwitchToLocalAsync()
     {
         if (_local) return;
-        _navigationCancellation?.Cancel(); ++_viewVersion;
+        ResetStream();
         _library = await _localStore.LoadAsync() ?? new();
         _demo = false; _local = true; _settings.Library = "local";
         await _store.SaveSettingsAsync(_settings);
@@ -31,7 +31,8 @@ public sealed partial class MainWindow
     private void ResetLibraryView()
     {
         ClearArticleSelection();
-        _continuation = null; _view = "all"; _viewLabel = "Articles";
+        ResetStream();
+        _view = "all"; _viewLabel = "Articles";
         SearchBox.Text = ""; ViewTitle.Text = _viewLabel; Notice.IsOpen = false;
         SelectArticlesNavigation(); BuildFeedNavigation(); ShowLocalArticles(); UpdateAccount(); ApplyLayout();
     }
@@ -62,13 +63,13 @@ public sealed partial class MainWindow
         account.Click += OnFeedlyAccount; menu.Items.Add(account);
         menu.Items.Add(new MenuFlyoutSeparator());
         var demo = new MenuFlyoutItem { Text = "Explore demo library" };
-        demo.Click += (_, _) => { _navigationCancellation?.Cancel(); ++_viewVersion; _library = DemoLibrary.Create(); _local = false; _demo = true; ResetLibraryView(); };
+        demo.Click += (_, _) => { _library = DemoLibrary.Create(); _local = false; _demo = true; ResetLibraryView(); };
         menu.Items.Add(demo); menu.ShowAt(AccountButton);
     }
 
     private async Task RefreshLocalAsync(string? importSummary = null)
     {
-        await _accountGate.WaitAsync(); SetBusy(true);
+        SetBusy(true); await _accountGate.WaitAsync();
         try
         {
             var subscriptions = _library.Subscriptions.ToArray();

@@ -185,11 +185,13 @@ public sealed partial class MainWindow
     {
         if (_busy || (!_local && !_demo)) return false;
         var originalLibrary = _library;
+        var ownsBusy = false;
         await _accountGate.WaitAsync();
         try
         {
             if (_busy || !ReferenceEquals(originalLibrary, _library)) return false;
             SetBusy(true);
+            ownsBusy = true;
             var before = SidebarOrganization.FeedIds(_library, _view);
             var edited = SidebarOrganization.CopyForEdit(_library);
             if (!edit(edited)) return false;
@@ -206,7 +208,7 @@ public sealed partial class MainWindow
             return true;
         }
         catch (Exception ex) { if (!reportError) throw; ShowError(ex); return false; }
-        finally { SetBusy(false); _accountGate.Release(); }
+        finally { if (ownsBusy) SetBusy(false); _accountGate.Release(); }
     }
 
     private void AttachSidebarDrag(Button source, Grid row, Border indicator, SidebarEntry entry)

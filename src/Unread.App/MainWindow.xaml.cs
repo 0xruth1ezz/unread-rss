@@ -28,11 +28,11 @@ public sealed partial class MainWindow : Window
     private LibrarySnapshot _library = new();
     private ReaderSettings _settings = new();
     private string? _token;
-    private bool _demo = true, _ready, _busy, _focus, _sidebarHidden, _compactReader;
+    private bool _demo = true, _ready, _libraryBusy, _focus, _sidebarHidden, _compactReader;
+    private readonly ArticleStreamState _streamState = new();
+    private bool _busy => _libraryBusy || _streamState.IsLoading;
     private string _view = "all", _viewLabel = "Articles";
-    private string? _continuation;
     private CancellationTokenSource? _navigationCancellation;
-    private int _viewVersion;
     private Article? _selected;
     private readonly SemaphoreSlim _accountGate = new(1, 1);
     private readonly HashSet<string> _collapsedFolders = [];
@@ -124,30 +124,38 @@ public sealed partial class MainWindow : Window
 
     private async Task NavigateAsync(string key, string label, bool contentChanged = false)
     {
-        if (_busy || (key == _view && !contentChanged)) return;
+        if (key == _view && !contentChanged) return;
         if (key != _view) ClearArticleSelection();
-        _view = key; _viewLabel = label; _continuation = null;
-        _navigationCancellation?.Cancel();
-        _navigationCancellation = new();
-        var version = ++_viewVersion;
+        _view = key; _viewLabel = label;
+        var version = ResetStream();
         foreach (var item in _navigation) { item.Selected = item.Key == key; item.Refresh(); }
         ViewTitle.Text = label;
         BuildFeedNavigation();
         ShowLocalArticles();
         if (_demo || _local || string.IsNullOrEmpty(_library.UserId)) return;
-        SetBusy(true);
+        _streamState.BeginLoad(); UpdateBusyState();
         try
         {
-            var page = await _feedly.GetStreamAsync(StreamId, _settings.UnreadOnly, ct: _navigationCancellation.Token);
-            if (version != _viewVersion) return;
+            var page = await _feedly.GetStreamAsync(StreamId, _settings.UnreadOnly, ct: _navigationCancellation?.Token ?? _lifetime.Token);
+            if (!_streamState.IsCurrent(version)) return;
             SyncEngine.Merge(_library, page.Items);
-            _continuation = page.Continuation;
+            _streamState.TrySetContinuation(version, page.Continuation);
             await _store.SaveAsync(_library);
-            ShowLocalArticles();
+            if (_streamState.IsCurrent(version)) ShowLocalArticles();
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { if (version == _viewVersion) ShowError(ex); }
-        finally { if (version == _viewVersion) SetBusy(false); }
+        catch (OperationCanceledException) when (!_streamState.IsCurrent(version) || _lifetime.IsCancellationRequested) { }
+        catch (Exception ex) { if (_streamState.IsCurrent(version)) ShowError(ex); }
+        finally { _streamState.EndLoad(version); UpdateBusyState(); }
+    }
+
+    private long ResetStream()
+    {
+        _navigationCancellation?.Cancel();
+        _navigationCancellation?.Dispose();
+        _navigationCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        var version = _streamState.Reset();
+        UpdateBusyState();
+        return version;
     }
 
     private void ClearArticleSelection()
@@ -164,12 +172,13 @@ public sealed partial class MainWindow : Window
         if (_busy) return;
         if (_local) { await RefreshLocalAsync(); return; }
         if (_demo) { ShowNotice("You're exploring the demo library.", "Use Add to start your local library, or choose a library in the sidebar.", InfoBarSeverity.Informational); return; }
-        await _accountGate.WaitAsync();
         SetBusy(true);
+        await _accountGate.WaitAsync();
         try
         {
-            _navigationCancellation?.Cancel();
-            ++_viewVersion;
+            var version = ResetStream();
+            var streamId = StreamId;
+            var unreadOnly = _settings.UnreadOnly;
             var profile = await _feedly.GetProfileAsync();
             if (!string.IsNullOrEmpty(_library.UserId) && _library.UserId != profile.Id)
                 throw new InvalidOperationException("This token belongs to a different account. Disconnect first to keep account data separate.");
@@ -177,17 +186,22 @@ public sealed partial class MainWindow : Window
             await _sync.FlushAsync(_library);
             var subscriptions = _feedly.GetSubscriptionsAsync();
             var counts = _feedly.GetUnreadCountsAsync();
-            var page = _feedly.GetStreamAsync(StreamId, _settings.UnreadOnly);
+            var page = _feedly.GetStreamAsync(streamId, unreadOnly, ct: _lifetime.Token);
             await Task.WhenAll(subscriptions, counts, page);
             _library.Subscriptions = await subscriptions;
             _library.UnreadCounts = await counts;
             var result = await page;
-            SyncEngine.Merge(_library, result.Items);
-            _continuation = result.Continuation;
+            if (_streamState.IsCurrent(version))
+            {
+                SyncEngine.Merge(_library, result.Items);
+                _streamState.TrySetContinuation(version, result.Continuation);
+            }
             _library.LastSync = DateTimeOffset.Now;
             await _store.SaveAsync(_library);
             Notice.IsOpen = false;
-            BuildFeedNavigation(); UpdateCounts(); ShowLocalArticles(); UpdateAccount();
+            BuildFeedNavigation(); UpdateCounts();
+            if (_streamState.IsCurrent(version)) ShowLocalArticles();
+            UpdateBusyState();
         }
         catch (Exception ex) { ShowError(ex); }
         finally { SetBusy(false); _accountGate.Release(); }
@@ -201,7 +215,7 @@ public sealed partial class MainWindow : Window
         _rows.Clear();
         foreach (var article in FilteredArticles()) _rows.Add(new(article));
         ArticleCount.Text = $"{_rows.Count}{(_settings.UnreadOnly ? " unread" : "")} article{(_rows.Count == 1 ? "" : "s")}{(SearchBox.Text.Length > 0 ? " found" : "")}";
-        LoadMoreButton.Visibility = !_demo && !_local && _continuation is not null ? Visibility.Visible : Visibility.Collapsed;
+        LoadMoreButton.Visibility = !_demo && !_local && _streamState.Continuation is not null ? Visibility.Visible : Visibility.Collapsed;
         EmptyList.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         var firstUse = _local && _library.Subscriptions.Count == 0 && _library.Articles.Count == 0;
         EmptyTitle.Text = SearchBox.Text.Length > 0 ? "No matching articles." : firstUse ? "Make room for good reading." : _settings.UnreadOnly ? "You're all caught up." : _view == "saved" ? "Keep something good." : "No articles yet.";
@@ -324,7 +338,7 @@ public sealed partial class MainWindow : Window
             try { await _sync.FlushAsync(_library); }
             catch (Exception ex) { ShowError(ex); }
         }
-        UpdateCounts(); BuildFeedNavigation(); UpdateArticleActions(); UpdateAccount();
+        UpdateCounts(); BuildFeedNavigation(); UpdateArticleActions(); UpdateBusyState();
         }
         finally { _accountGate.Release(); }
     }
@@ -400,18 +414,20 @@ public sealed partial class MainWindow : Window
 
     private async void OnLoadMore(object sender, RoutedEventArgs e)
     {
-        if (_busy || _continuation is null || _demo || _local) return;
-        var version = _viewVersion;
-        SetBusy(true);
+        if (_busy || _streamState.Continuation is null || _demo || _local) return;
+        var version = _streamState.BeginLoad();
+        UpdateBusyState();
         try
         {
-            var page = await _feedly.GetStreamAsync(StreamId, _settings.UnreadOnly, _continuation);
-            if (version != _viewVersion) return;
-            SyncEngine.Merge(_library, page.Items); _continuation = page.Continuation;
-            await _store.SaveAsync(_library); ShowLocalArticles();
+            var page = await _feedly.GetStreamAsync(StreamId, _settings.UnreadOnly, _streamState.Continuation, _navigationCancellation?.Token ?? _lifetime.Token);
+            if (!_streamState.IsCurrent(version)) return;
+            SyncEngine.Merge(_library, page.Items); _streamState.TrySetContinuation(version, page.Continuation);
+            await _store.SaveAsync(_library);
+            if (_streamState.IsCurrent(version)) ShowLocalArticles();
         }
-        catch (Exception ex) { ShowError(ex); }
-        finally { if (version == _viewVersion) SetBusy(false); }
+        catch (OperationCanceledException) when (!_streamState.IsCurrent(version) || _lifetime.IsCancellationRequested) { }
+        catch (Exception ex) { if (_streamState.IsCurrent(version)) ShowError(ex); }
+        finally { _streamState.EndLoad(version); UpdateBusyState(); }
     }
 
     private void MoveArticle(int direction)
@@ -479,7 +495,7 @@ public sealed partial class MainWindow : Window
                 var warning = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Sync before disconnecting?", Content = $"{_library.Pending.Count} changes have not reached Feedly. Disconnecting removes the local library and these changes.", PrimaryButtonText = "Disconnect and discard", CloseButtonText = "Keep account", RequestedTheme = Root.RequestedTheme };
                 if (await warning.ShowAsync() != ContentDialogResult.Primary) return;
             }
-            _navigationCancellation?.Cancel(); ++_viewVersion;
+            ResetStream();
             _credentials.Clear(); _token = null; _demo = false; _local = true; _settings.Library = "local";
             await _store.SaveAsync(new());
             await _store.SaveSettingsAsync(_settings);
@@ -535,10 +551,19 @@ public sealed partial class MainWindow : Window
 
     private void SetBusy(bool busy)
     {
-        _busy = busy; RefreshButton.IsEnabled = LoadMoreButton.IsEnabled = AccountButton.IsEnabled = AddButton.IsEnabled = MarkAllReadButton.IsEnabled = !busy;
+        _libraryBusy = busy;
+        UpdateBusyState();
+    }
+
+    private void UpdateBusyState()
+    {
+        var busy = _busy;
+        RefreshButton.IsEnabled = LoadMoreButton.IsEnabled = AccountButton.IsEnabled = AddButton.IsEnabled = MarkAllReadButton.IsEnabled = !busy;
         NewFolderButton.IsEnabled = !busy && (_local || _demo);
-        MainNavigation.IsEnabled = ArticleFilter.IsEnabled = !busy;
-        FeedNavigation.IsHitTestVisible = !busy;
+        ArticleFilter.IsEnabled = !busy;
+        // Reading and source navigation remain available during background work.
+        MainNavigation.IsEnabled = true;
+        FeedNavigation.IsHitTestVisible = true;
         if (busy) SyncStatus.Text = _local ? "Updating your library…" : "Syncing with Feedly…"; else UpdateAccount();
     }
     private void ShowError(Exception ex)
